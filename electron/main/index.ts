@@ -4,6 +4,8 @@ import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
 
+import * as ex from './expose'
+
 globalThis.__filename = fileURLToPath(import.meta.url)
 globalThis.__dirname = path.dirname(__filename)
 
@@ -80,7 +82,16 @@ async function createWindow() {
   update(win)
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(createWindow).then(() => {
+  console.log(ex.capi.add_one(2))
+  console.log(ex.capi.describe(22333))
+  ex.capi.say_hello()
+  ex.capi.say_sth('echo echo echo!')
+  ex.capi.more_desc(99, (num: any, s: any) => {
+    console.log(num)
+    console.log(s)
+  })
+})
 
 app.on('window-all-closed', () => {
   win = null
@@ -119,4 +130,30 @@ ipcMain.handle('open-win', (_, arg) => {
   } else {
     childWindow.loadFile(indexHtml, { hash: arg })
   }
+})
+
+function parseMethodStr(method: string) {
+  const layers = method.split('.')
+  const ret = layers.reduce((acc: any, now) => {
+    if (!Object.hasOwn(acc, now)) {
+      throw new Error(`[${now}] not exist!`)
+    }
+    return acc[now]
+  }, ex)
+  if (typeof ret !== 'function') {
+    throw Error(`[${method}] is not a function!`)
+  }
+  return ret
+}
+
+
+ipcMain.handle('call-main', (_, methodStr: string, ...args) => {
+  if (args.length === 0) {
+    console.log(`[call-main] received: [call ${methodStr}] without args`)
+  } else {
+    console.log(`[call-main] received: [call ${methodStr}] with args: ${args}`)
+  }
+  
+  const method = parseMethodStr(methodStr)
+  return method(...args)
 })
